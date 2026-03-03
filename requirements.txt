@@ -1,0 +1,11 @@
+
+fastapi==0.109.2
+uvicorn[standard]==0.27.1
+httpx==0.27.0
+pydantic==2.6.1
+python-dotenv==1.0.1
+
+# Arabic diacritization library used by the backend. Provides
+# ``TashkeelClass`` for converting undiacritized Arabic text to fully
+# vocalized outputhttps://pypi.org/project/mishkal/#:~:text=pip%20install%20mishkal.
+mishkal==0.4.1
