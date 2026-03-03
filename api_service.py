@@ -14,8 +14,11 @@ import re
 import time
 from typing import Optional
 
+from pathlib import Path
+
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 # ─── App Init ─────────────────────────────────────────────────────────
@@ -24,6 +27,11 @@ app = FastAPI(
     description="Arabic TTS Studio — Secure Backend Proxy",
     version="0.1.1",
 )
+
+# ─── Static file serving ──────────────────────────────────────────────
+AUDIO_DIR = Path(__file__).parent / "static" / "audio"
+AUDIO_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/static", StaticFiles(directory=Path(__file__).parent / "static"), name="static")
 
 # CORS — lock down in production
 ALLOWED_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
@@ -296,11 +304,11 @@ async def _call_elevenlabs(
         resp = await client.post(url, json=payload, headers=headers)
         resp.raise_for_status()
 
-    # TODO: Save resp.content (MP3 bytes) to S3/GCS
-    # Return the public URL of the stored file
-    # For now, return a placeholder
-    audio_hash = hashlib.sha256(text.encode()).hexdigest()[:12]
-    return f"/static/audio/{audio_hash}.mp3"
+    # Save MP3 bytes to local static directory
+    ck = cache_key(text, voice_id)
+    audio_path = AUDIO_DIR / f"{ck}.mp3"
+    audio_path.write_bytes(resp.content)
+    return f"/static/audio/{ck}.mp3"
 
 
 # ── 3. iOS Shortcut Endpoint ─────────────────────────────────────────

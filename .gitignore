@@ -8,5 +8,8 @@ __pycache__/
 frontend/node_modules/
 frontend/.next/
 
+# Generated audio files
+static/audio/*.mp3
+
 # OS
 .DS_Store

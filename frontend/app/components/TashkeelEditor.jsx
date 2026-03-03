@@ -144,6 +144,38 @@ export default function TashkeelEditor() {
   const [isEditMode, setIsEditMode] = useState(false);
   const [charCount, setCharCount] = useState(0);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [selectedVoice, setSelectedVoice] = useState(0);
+  const [audioUrl, setAudioUrl] = useState(null);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [error, setError] = useState(null);
+  const audioRef = useRef(null);
+  const errorTimerRef = useRef(null);
+
+  const voices = [
+    { name: "أحمد", desc: "صوت رجالي — رسمي", emoji: "🎙", voiceId: "pNInz6obpgDQGcFmaJgB" },
+    { name: "فاطمة", desc: "صوت نسائي — دافئ", emoji: "🎤", voiceId: "EXAVITQu4vr4xnSDxMaL" },
+    { name: "يوسف", desc: "صوت رجالي — شبابي", emoji: "🎧", voiceId: "TX3LPaxmHKxFdv7VOQHJ" },
+  ];
+
+  // Show error with auto-dismiss after 6 seconds
+  const showError = useCallback((msg) => {
+    setError(msg);
+    if (errorTimerRef.current) clearTimeout(errorTimerRef.current);
+    errorTimerRef.current = setTimeout(() => setError(null), 6000);
+  }, []);
+
+  // Parse error detail from API response or fallback to generic message
+  const parseApiError = async (res, fallback) => {
+    try {
+      const data = await res.json();
+      return data.detail || fallback;
+    } catch {
+      if (res.status === 429) return "تم تجاوز حد الطلبات. حاول مرة أخرى بعد دقيقة.";
+      if (res.status >= 500) return "خطأ في الخادم. تأكد من تشغيل الخدمة الخلفية.";
+      return fallback;
+    }
+  };
 
   // Sync character count
   useEffect(() => {
@@ -210,6 +242,7 @@ export default function TashkeelEditor() {
   // Auto-diacritize via backend API
   const handleAutoDiacritize = useCallback(async () => {
     setIsProcessing(true);
+    setError(null);
     try {
       const plainText = segmentsToText(segments).replace(/[\u064B-\u0652]/g, "");
       const res = await fetch("/api/v1/diacritize", {
@@ -217,14 +250,59 @@ export default function TashkeelEditor() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: plainText }),
       });
-      if (!res.ok) throw new Error("Diacritization failed");
+      if (!res.ok) {
+        const msg = await parseApiError(res, "فشل التشكيل التلقائي. حاول مرة أخرى.");
+        showError(msg);
+        setIsProcessing(false);
+        return;
+      }
       const data = await res.json();
       setSegments(parseArabicText(data.diacritized));
     } catch (err) {
       console.error("Auto-diacritize error:", err);
+      showError("تعذر الاتصال بالخادم. تأكد من تشغيل الخدمة الخلفية.");
     }
     setIsProcessing(false);
-  }, [segments]);
+  }, [segments, showError]);
+
+  // Generate audio via backend
+  const handleGenerateAudio = useCallback(async () => {
+    setIsGenerating(true);
+    setError(null);
+    try {
+      const text = segmentsToText(segments);
+      const res = await fetch("/api/v1/render", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, voice_id: voices[selectedVoice].voiceId }),
+      });
+      if (!res.ok) {
+        const msg = await parseApiError(res, "فشل توليد الصوت. حاول مرة أخرى.");
+        showError(msg);
+        setIsGenerating(false);
+        return;
+      }
+      const data = await res.json();
+      setAudioUrl(data.audio_url);
+      setIsPlaying(false);
+    } catch (err) {
+      console.error("Generate audio error:", err);
+      showError("تعذر الاتصال بالخادم. تأكد من تشغيل الخدمة الخلفية.");
+    }
+    setIsGenerating(false);
+  }, [segments, selectedVoice, showError]);
+
+  // Play / pause toggle
+  const handlePlayPause = useCallback(() => {
+    const audio = audioRef.current;
+    if (!audio || !audioUrl) return;
+    if (isPlaying) {
+      audio.pause();
+    } else {
+      audio.play();
+    }
+    setIsPlaying(!isPlaying);
+  }, [audioUrl, isPlaying]);
 
   // Get final output text
   const outputText = segmentsToText(segments);
@@ -788,6 +866,48 @@ export default function TashkeelEditor() {
           color: var(--teal);
           font-weight: 600;
         }
+
+        /* ── Error Banner ────────────────────────── */
+        .error-banner {
+          background: rgba(248, 113, 113, 0.1);
+          border: 1px solid rgba(248, 113, 113, 0.3);
+          border-radius: 10px;
+          padding: 12px 16px;
+          margin-bottom: 16px;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          animation: error-in 0.25s ease-out;
+        }
+
+        @keyframes error-in {
+          from { opacity: 0; transform: translateY(-8px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+
+        .error-banner-text {
+          font-size: 13px;
+          color: var(--danger);
+          flex: 1;
+        }
+
+        .error-banner-close {
+          background: none;
+          border: none;
+          color: var(--danger);
+          cursor: pointer;
+          font-size: 16px;
+          padding: 2px 6px;
+          border-radius: 4px;
+          opacity: 0.7;
+          transition: opacity 0.15s;
+          flex-shrink: 0;
+        }
+
+        .error-banner-close:hover {
+          opacity: 1;
+        }
       `}</style>
 
       <div className="app-container">
@@ -804,6 +924,16 @@ export default function TashkeelEditor() {
             v0.1.0 — Tashkeel Editor
           </div>
         </header>
+
+        {/* ── Error Banner ─────────────────────────── */}
+        {error && (
+          <div className="error-banner">
+            <span className="error-banner-text">{error}</span>
+            <button className="error-banner-close" onClick={() => setError(null)}>
+              ✕
+            </button>
+          </div>
+        )}
 
         {/* ── Dashboard ──────────────────────────── */}
         <div className="dashboard">
@@ -907,21 +1037,18 @@ export default function TashkeelEditor() {
                 اختيار الصوت
               </div>
 
-              {[
-                { name: "أحمد", desc: "صوت رجالي — رسمي", emoji: "🎙" },
-                { name: "فاطمة", desc: "صوت نسائي — دافئ", emoji: "🎤" },
-                { name: "يوسف", desc: "صوت رجالي — شبابي", emoji: "🎧" },
-              ].map((voice, i) => (
+              {voices.map((voice, i) => (
                 <div
                   key={voice.name}
-                  className={`voice-card ${i === 0 ? "active" : ""}`}
+                  className={`voice-card ${i === selectedVoice ? "active" : ""}`}
+                  onClick={() => setSelectedVoice(i)}
                 >
                   <div className="voice-avatar">{voice.emoji}</div>
                   <div className="voice-info">
                     <div className="voice-name">{voice.name}</div>
                     <div className="voice-desc">{voice.desc}</div>
                   </div>
-                  <div className="voice-check">{i === 0 ? "✓" : ""}</div>
+                  <div className="voice-check">{i === selectedVoice ? "✓" : ""}</div>
                 </div>
               ))}
             </div>
@@ -933,20 +1060,49 @@ export default function TashkeelEditor() {
                 مشغل الصوت
               </div>
 
+              <audio
+                ref={audioRef}
+                src={audioUrl || undefined}
+                onEnded={() => setIsPlaying(false)}
+                style={{ display: "none" }}
+              />
               <div className="audio-player">
-                <button className="play-btn">▶</button>
+                <button
+                  className="play-btn"
+                  onClick={handlePlayPause}
+                  disabled={!audioUrl}
+                  style={{ opacity: audioUrl ? 1 : 0.4 }}
+                >
+                  {isPlaying ? "⏸" : "▶"}
+                </button>
                 <div className="waveform-placeholder" />
               </div>
 
               <div className="btn-row" style={{ marginTop: 14 }}>
-                <button className="btn btn-primary" style={{ flex: 1 }}>
-                  🔊 توليد الصوت
+                <button
+                  className="btn btn-primary"
+                  style={{ flex: 1 }}
+                  onClick={handleGenerateAudio}
+                  disabled={isGenerating}
+                >
+                  {isGenerating ? "⏳ جارٍ التوليد..." : "🔊 توليد الصوت"}
                 </button>
               </div>
               <div className="btn-row">
-                <button className="btn btn-ghost" style={{ flex: 1, fontSize: 12 }}>
-                  ↓ تحميل MP3
-                </button>
+                {audioUrl ? (
+                  <a
+                    href={audioUrl}
+                    download="faseeh-audio.mp3"
+                    className="btn btn-ghost"
+                    style={{ flex: 1, fontSize: 12, textDecoration: "none", textAlign: "center", justifyContent: "center" }}
+                  >
+                    ↓ تحميل MP3
+                  </a>
+                ) : (
+                  <button className="btn btn-ghost" style={{ flex: 1, fontSize: 12 }} disabled>
+                    ↓ تحميل MP3
+                  </button>
+                )}
               </div>
             </div>
           </div>
