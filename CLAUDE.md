@@ -93,6 +93,17 @@ Configured via `.env` (copy from `.env.example`):
 
 Single-file FastAPI service. App metadata: title "Fasseeh API", version "0.1.1".
 
+### Python Dependencies (pinned in `requirements.txt`)
+
+| Package | Version |
+|---------|---------|
+| `fastapi` | 0.109.2 |
+| `uvicorn[standard]` | 0.27.1 |
+| `httpx` | 0.27.0 |
+| `pydantic` | 2.6.1 |
+| `python-dotenv` | 1.0.1 |
+| `mishkal` | 0.4.1 |
+
 ### API Routes
 
 | Method | Path | Description |
@@ -179,8 +190,8 @@ Textarea (raw Arabic text)  → Interactive char tiles
 ### State Variables
 
 ```javascript
-rawText        // raw Arabic string in the textarea
-segments       // parsed array of { base, marks[] } objects
+rawText        // raw Arabic string in the textarea (default: "بسم الله الرحمن الرحيم")
+segments       // parsed array of { base, marks[] } objects (default: parseArabicText of rawText)
 selectedIndex  // index of clicked CharTile (null if none)
 popoverPos     // { x, y } for DiacriticPopover positioning
 isEditMode     // boolean: textarea vs char-tile view
@@ -209,9 +220,9 @@ error          // string error message (null if none); auto-clears after 6s
 
 ```javascript
 const voices = [
-  { name: "أحمد", desc: "صوت رجالي — رسمي",   voiceId: "pNInz6obpgDQGcFmaJgB" },
-  { name: "فاطمة", desc: "صوت نسائي — دافئ", voiceId: "EXAVITQu4vr4xnSDxMaL" },
-  { name: "يوسف", desc: "صوت رجالي — شبابي", voiceId: "TX3LPaxmHKxFdv7VOQHJ" },
+  { name: "أحمد",  desc: "صوت رجالي — رسمي",   emoji: "🎙", voiceId: "pNInz6obpgDQGcFmaJgB" },
+  { name: "فاطمة", desc: "صوت نسائي — دافئ",   emoji: "🎤", voiceId: "EXAVITQu4vr4xnSDxMaL" },
+  { name: "يوسف",  desc: "صوت رجالي — شبابي",  emoji: "🎧", voiceId: "TX3LPaxmHKxFdv7VOQHJ" },
 ];
 ```
 
